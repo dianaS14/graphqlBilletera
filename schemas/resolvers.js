@@ -201,7 +201,7 @@ const resolvers = {
               }
             `,
             variables: {
-              Id_estado: 1,
+              Id_estado: 4,
               Id_tipo_transaccion: 2,
               destino: args.input.destino,
               monto: args.input.monto,
@@ -258,6 +258,33 @@ const resolvers = {
               monto_disponible: montoDisponibleDestino + args.input.monto,
             },
           });
+
+
+          const { data: updateEstadoTransacccionAprobada } = await client.mutate({
+            mutation: gql`
+              mutation updateTransaccion($Id_transaccion: Int!) {
+                update_BilleteraElectronica_Transaccion(
+                  where: { Id_transaccion: { _eq: $Id_transaccion } }
+                  _set: {
+                    Id_estado: 4
+                   
+                  }
+                ) {
+                  returning {
+                    Id_transaccion
+                    Id_estado
+                    descripcion_rechazo
+                  }
+                }
+              }
+            `,
+            variables: {
+              Id_transaccion:
+                data.insert_BilleteraElectronica_Transaccion.returning[0]
+                  .Id_transaccion,
+            },
+          });
+
         } catch (error) {
           // se rechaza la transaccion
           const { data: updateEstadoTransacccion } = await client.mutate({
