@@ -1,48 +1,58 @@
 const { gql } = require("apollo-server-express");
 
 const typeDefs = gql`
-  type Usuario {
-    Id_estado: Int
+
+
+type Usuario {
+    Id_estado: Estado
     nombre: String
   }
 
   type Estado {
+    Id_estado: ID
     nombre: String
     estado: String
   }
 
   type Billetera {
-    Id_billetera: Int
-    Id_estado: Int
-    Id_usuario: Int
+    Id_billetera: ID
+    Id_estado: Estado
+    Id_usuario: Usuario
     monto_disponible: Float
-    Usuario: Usuario
   }
 
   type Transaccion {
-    Id_tipo_transacccion: Int!
-    origen: Int!
-    destino: Int!
-    monto: Float!
-    Id_estado: Int!
-    fecha: String!
-    descripcion: String!
+    Id_transacccion: ID
+    Id_tipo_transacccion: TipoTransaccion
+    origen: Billetera
+    destino: Billetera
+    monto: Float
+    Id_estado: Estado
+    descripcion: String
+  }
+
+  type TipoTransaccion {
+    Id_transacccion: ID
+    Id_estado: Estado
+    descripcion: String
+    nombre: String
   }
 
   input CreateTransaccionInput {
     Id_transaccion: Int
     Id_tipo_transaccion: Int!
-    origen: Int!
-    destino: Int!
-    monto: Float!
-    Id_estado: Int!
-    fecha: String!
-    descripcion: String!
+    origen: Int
+    destino: Int
+    monto: Float
+    Id_estado: Int
+    descripcion: String
   }
 
+
+
   type Query {
-    BilleteraElectronica_Estado: [Estado]
-    BilleteraElectronica_Billetera(Id_billetera: Int!): [Billetera]
+    billeteraElectronicaEstado: [Estado]
+    billeteraElectronicaBilletera(idBilletera: Int!): [Billetera]
   }
 
   type Mutation {

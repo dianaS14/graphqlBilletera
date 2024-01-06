@@ -21,7 +21,7 @@ const client = new ApolloClient({
 
 const resolvers = {
   Query: {
-    BilleteraElectronica_Estado: async () => {
+    billeteraElectronicaEstado: async () => {
       try {
         const { data } = await client.query({
           query: gql`
@@ -39,11 +39,41 @@ const resolvers = {
         throw new Error("Error al obtener estados desde Hasura");
       }
     },
+    billeteraElectronicaBilletera: async (_, { idBilletera }) => {
+      const { data: billeteraOrigen } = await client.query({
+        query: gql`
+          query ($Id_billetera: Int!) @cached {
+            BilleteraElectronica_Billetera(
+              where: { Id_billetera: { _eq: $Id_billetera } }
+            ) {
+              Id_estado
+              monto_disponible
+              Usuario {
+                Id_estado
+              }
+            }
+          }
+        `,
+        variables: {
+          Id_billetera: origen,
+        },
+      });
+    },
   },
   Mutation: {
-    createTransaccion: async (_, args) => {
+    createTransaccion: async (_, { input }) => {
       try {
-        //validar condiciones para la transacccion
+        const {
+          Id_estado,
+          Id_transaccion,
+          destino,
+          monto,
+          origen,
+          descripcion,
+        } = input;
+
+       
+
         const { data: billeteraOrigen } = await client.query({
           query: gql`
             query ($Id_billetera: Int!) @cached {
@@ -59,7 +89,7 @@ const resolvers = {
             }
           `,
           variables: {
-            Id_billetera: args.input.origen,
+            Id_billetera: origen,
           },
         });
 
@@ -78,7 +108,7 @@ const resolvers = {
             }
           `,
           variables: {
-            Id_billetera: args.input.destino,
+            Id_billetera: destino,
           },
         });
 
@@ -121,15 +151,13 @@ const resolvers = {
           throw new Error("El Usuario destino esta inactivo");
         }
 
-        if (args.input.monto > montoDisponibleOrigen) {
+        if (monto > montoDisponibleOrigen) {
           throw new Error(
             "No tiene el dinero suficiente para hacer la transaccion"
           );
         }
 
-        // Insert de transacciones
-
-        //Se crea el debito
+        //se crea el debito
         const { data } = await client.mutate({
           mutation: gql`
             mutation CrearTransaccion(
@@ -161,159 +189,156 @@ const resolvers = {
           `,
           variables: {
             Id_estado: 3,
-            Id_tipo_transaccion: args.input.Id_tipo_transaccion,
-            destino: args.input.destino,
-            monto: args.input.monto,
-            origen: args.input.origen,
-            descripcion: args.input.descripcion,
+            Id_tipo_transaccion: 1,
+            destino: destino,
+            monto: monto,
+            origen: origen,
+            descripcion:descripcion,
           },
         });
 
         try {
-          // se crea el credito
-          const { data: crearCredito } = await client.mutate({
-            mutation: gql`
-              mutation crearCredito(
-                $Id_estado: Int!
-                $Id_tipo_transaccion: Int!
-                $destino: Int!
-                $monto: numeric!
-                $origen: Int!
-                $descripcion: String!
-              ) {
-                insert_BilleteraElectronica_Transaccion(
-                  objects: {
-                    Id_estado: $Id_estado
-                    Id_tipo_transaccion: $Id_tipo_transaccion
-                    destino: $destino
-                    monto: $monto
-                    origen: $origen
-                    descripcion: $descripcion
+              // se crea el credito
+              const { data: crearCredito } = await client.mutate({
+                mutation: gql`
+                  mutation crearCredito(
+                    $Id_estado: Int!
+                    $Id_tipo_transaccion: Int!
+                    $destino: Int!
+                    $monto: numeric!
+                    $origen: Int!
+                    $descripcion: String!
+                  ) {
+                    insert_BilleteraElectronica_Transaccion(
+                      objects: {
+                        Id_estado: $Id_estado
+                        Id_tipo_transaccion: $Id_tipo_transaccion
+                        destino: $destino
+                        monto: $monto
+                        origen: $origen
+                        descripcion: $descripcion
+                      }
+                    ) {
+                      returning {
+                        Id_estado
+                        Id_tipo_transaccion
+                        Id_transaccion
+                        descripcion
+                      }
+                    }
                   }
-                ) {
-                  returning {
-                    Id_estado
-                    Id_tipo_transaccion
-                    Id_transaccion
-                    descripcion
+                `,
+                variables: {
+                  Id_estado: 4,
+                  Id_tipo_transaccion: 2,
+                  destino: destino,
+                  monto: monto,
+                  origen: origen,
+                  descripcion: descripcion,
+                },
+              });
+    
+              // se actualizan los montos
+              const { data: updateOrigen } = await client.mutate({
+                mutation: gql`
+                  mutation updateOrigen(
+                    $Id_billetera: Int!
+                    $monto_disponible: numeric
+                  ) {
+                    update_BilleteraElectronica_Billetera(
+                      where: { Id_billetera: { _eq: $Id_billetera } }
+                      _set: { monto_disponible: $monto_disponible }
+                    ) {
+                      returning {
+                        Id_billetera
+                        Id_estado
+                        monto_disponible
+                      }
+                    }
                   }
-                }
-              }
-            `,
-            variables: {
-              Id_estado: 4,
-              Id_tipo_transaccion: 2,
-              destino: args.input.destino,
-              monto: args.input.monto,
-              origen: args.input.origen,
-              descripcion: args.input.descripcion,
-            },
-          });
+                `,
+                variables: {
+                  Id_billetera: origen,
+                  monto_disponible: montoDisponibleOrigen - monto,
+                },
+              });
+    
+              const { data: updateDestino } = await client.mutate({
+                mutation: gql`
+                  mutation updateDestino(
+                    $Id_billetera: Int!
+                    $monto_disponible: numeric
+                  ) {
+                    update_BilleteraElectronica_Billetera(
+                      where: { Id_billetera: { _eq: $Id_billetera } }
+                      _set: { monto_disponible: $monto_disponible }
+                    ) {
+                      returning {
+                        Id_billetera
+                        Id_estado
+                        monto_disponible
+                      }
+                    }
+                  }
+                `,
+                variables: {
+                  Id_billetera: destino,
+                  monto_disponible: montoDisponibleDestino + monto,
+                },
+              });
+    
+              const { data: updateEstadoTransacccionAprobada } =
+                await client.mutate({
+                  mutation: gql`
+                    mutation updateTransaccion($Id_transaccion: Int!) {
+                      update_BilleteraElectronica_Transaccion(
+                        where: { Id_transaccion: { _eq: $Id_transaccion } }
+                        _set: { Id_estado: 4 }
+                      ) {
+                        returning {
+                          Id_transaccion
+                          Id_estado
+                          descripcion_rechazo
+                        }
+                      }
+                    }
+                  `,
+                  variables: {
+                    Id_transaccion:
+                      data.insert_BilleteraElectronica_Transaccion.returning[0]
+                        .Id_transaccion,
+                  },
+                });
+            } catch (error) {
+              // se rechaza la transaccion
+              const { data: updateEstadoTransacccion } = await client.mutate({
+                mutation: gql`
+                  mutation updateTransaccion($Id_transaccion: Int!) {
+                    update_BilleteraElectronica_Transaccion(
+                      where: { Id_transaccion: { _eq: $Id_transaccion } }
+                      _set: {
+                        Id_estado: 5
+                        descripcion_rechazo: "Falla al crear credito"
+                      }
+                    ) {
+                      returning {
+                        Id_transaccion
+                        Id_estado
+                        descripcion_rechazo
+                      }
+                    }
+                  }
+                `,
+                variables: {
+                  Id_transaccion:
+                    data.insert_BilleteraElectronica_Transaccion.returning[0]
+                      .Id_transaccion,
+                },
+              });
+    
+              throw new Error(` No se pudo realizar la transaccion ${error}`);
+            }
 
-          // se actualizan los montos
-          const { data: updateOrigen } = await client.mutate({
-            mutation: gql`
-              mutation updateOrigen(
-                $Id_billetera: Int!
-                $monto_disponible: numeric
-              ) {
-                update_BilleteraElectronica_Billetera(
-                  where: { Id_billetera: { _eq: $Id_billetera } }
-                  _set: { monto_disponible: $monto_disponible }
-                ) {
-                  returning {
-                    Id_billetera
-                    Id_estado
-                    monto_disponible
-                  }
-                }
-              }
-            `,
-            variables: {
-              Id_billetera: args.input.origen,
-              monto_disponible: montoDisponibleOrigen - args.input.monto,
-            },
-          });
-
-          const { data: updateDestino } = await client.mutate({
-            mutation: gql`
-              mutation updateDestino(
-                $Id_billetera: Int!
-                $monto_disponible: numeric
-              ) {
-                update_BilleteraElectronica_Billetera(
-                  where: { Id_billetera: { _eq: $Id_billetera } }
-                  _set: { monto_disponible: $monto_disponible }
-                ) {
-                  returning {
-                    Id_billetera
-                    Id_estado
-                    monto_disponible
-                  }
-                }
-              }
-            `,
-            variables: {
-              Id_billetera: args.input.destino,
-              monto_disponible: montoDisponibleDestino + args.input.monto,
-            },
-          });
-
-
-          const { data: updateEstadoTransacccionAprobada } = await client.mutate({
-            mutation: gql`
-              mutation updateTransaccion($Id_transaccion: Int!) {
-                update_BilleteraElectronica_Transaccion(
-                  where: { Id_transaccion: { _eq: $Id_transaccion } }
-                  _set: {
-                    Id_estado: 4
-                   
-                  }
-                ) {
-                  returning {
-                    Id_transaccion
-                    Id_estado
-                    descripcion_rechazo
-                  }
-                }
-              }
-            `,
-            variables: {
-              Id_transaccion:
-                data.insert_BilleteraElectronica_Transaccion.returning[0]
-                  .Id_transaccion,
-            },
-          });
-
-        } catch (error) {
-          // se rechaza la transaccion
-          const { data: updateEstadoTransacccion } = await client.mutate({
-            mutation: gql`
-              mutation updateTransaccion($Id_transaccion: Int!) {
-                update_BilleteraElectronica_Transaccion(
-                  where: { Id_transaccion: { _eq: $Id_transaccion } }
-                  _set: {
-                    Id_estado: 5
-                    descripcion_rechazo: "Falla al crear credito"
-                  }
-                ) {
-                  returning {
-                    Id_transaccion
-                    Id_estado
-                    descripcion_rechazo
-                  }
-                }
-              }
-            `,
-            variables: {
-              Id_transaccion:
-                data.insert_BilleteraElectronica_Transaccion.returning[0]
-                  .Id_transaccion,
-            },
-          });
-
-          throw new Error(` No se pudo realizar la transaccion ${error}`);
-        }
 
         return data.insert_BilleteraElectronica_Transaccion.returning[0];
       } catch (error) {
@@ -322,5 +347,7 @@ const resolvers = {
     },
   },
 };
+
+
 
 module.exports = { resolvers };
